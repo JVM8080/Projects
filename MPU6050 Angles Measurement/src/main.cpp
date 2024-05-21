@@ -1,11 +1,11 @@
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
-#include "Wire.h"
+#include <wire.h>
 
 MPU6050 mpu;
 
 //#define OUTPUT_REALACC
-#define OUTPUT_YAWPITCHROLL
+//#define OUTPUT_YAWPITCHROLL
 #define OUTPUT_GLOBALACC
 
 uint8_t devStatus;
@@ -28,10 +28,15 @@ void setup() {
     mpu.initialize();
     devStatus = mpu.dmpInitialize();
 
-    mpu.setXGyroOffset(101.00000);
-    mpu.setYGyroOffset(-70.00000);
-    mpu.setZGyroOffset(27.00000);
-    mpu.setZAccelOffset(1870.00000); 
+    int8_t accelConfig = mpu.getFullScaleAccelRange();
+
+    Serial.print("Full Scale Accel Range: ");
+    Serial.println(accelConfig);
+
+    mpu.setXGyroOffset(93.00000);
+    mpu.setYGyroOffset(-81.00000);
+    mpu.setZGyroOffset(32.00000);
+    mpu.setZAccelOffset(1836.00000); 
     
     if (devStatus == 0) {
         mpu.CalibrateAccel(6);
@@ -65,12 +70,13 @@ void loop() {
             mpu.dmpGetGravity(&gravity, &q);
             mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
             mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
-            Serial.print(aaWorld.x);
+            Serial.print(aaWorld.x*9.81/16384.0);
+            Serial.print(", ");
+            Serial.print(aaWorld.y*9.81/16384.0);
             Serial.print(",");
-            Serial.print(aaWorld.y);
-            Serial.print(",");
-            Serial.print(aaWorld.z);
-            Serial.print(",");
+            Serial.println(aaWorld.z*9.81/16384.0);
+            delay(20);
+            //Serial.print(",");
         #endif
 
         #ifdef OUTPUT_YAWPITCHROLL
