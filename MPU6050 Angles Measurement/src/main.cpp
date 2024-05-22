@@ -1,12 +1,18 @@
-#include "I2Cdev.h"
-#include "MPU6050_6Axis_MotionApps20.h"
+#include <I2Cdev.h>
+#include <MPU6050_6Axis_MotionApps20.h>
 #include <wire.h>
+#include <wifi.h>
+#include <ArduinoJson.h>
+#include <HTTPClient.h>
 
 MPU6050 mpu;
 
-//#define OUTPUT_REALACC
-//#define OUTPUT_YAWPITCHROLL
-#define OUTPUT_GLOBALACC
+// Clave y nombre de la red Wifi
+const char* ssid = "your_SSID";
+const char* password = "your_PASSWORD";
+
+// URL a la que se le va a hacer el POST
+const char* serverUrl = "http://example.com/api/data";
 
 uint8_t devStatus;
 
@@ -17,21 +23,28 @@ Quaternion q;
 VectorInt16 aa;         
 VectorInt16 aaReal;     
 VectorInt16 aaWorld;    
-VectorFloat gravity;    
-float ypr[3];         
+VectorFloat gravity; 
+   
+float ypr[3];
+double insVel[3], accVel[3], insPos[3], accPos[3];
+int _cont = 0;
 
 void setup() {
     Wire.begin();
     Wire.setClock(400000); 
     Serial.begin(115200);
 
+    /*// Conectarse a la red WiFi
+    WiFi.begin(ssid, password);
+
+    while (WiFi.status() != WL_CONNECTED){
+        delay(1000);
+        Serial.println("Connecting to WiFi...");
+    }
+    Serial.println("Connected to WiFi");*/
+
     mpu.initialize();
     devStatus = mpu.dmpInitialize();
-
-    int8_t accelConfig = mpu.getFullScaleAccelRange();
-
-    Serial.print("Full Scale Accel Range: ");
-    Serial.println(accelConfig);
 
     mpu.setXGyroOffset(93.00000);
     mpu.setYGyroOffset(-81.00000);
@@ -51,44 +64,48 @@ void setup() {
 
 void loop() {
     if (mpu.dmpGetCurrentFIFOPacket(fifoBuffer)) {
-        #ifdef OUTPUT_REALACC
-            mpu.dmpGetQuaternion(&q, fifoBuffer);
-            mpu.dmpGetAccel(&aa, fifoBuffer);
-            mpu.dmpGetGravity(&gravity, &q);
-            mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-            Serial.print("areal\t");
-            Serial.print(aaReal.x);
-            Serial.print("\t");
-            Serial.print(aaReal.y);
-            Serial.print("\t");
-            Serial.println(aaReal.z);
-        #endif
+        _cont++;
+        mpu.dmpGetQuaternion(&q, fifoBuffer);
+        mpu.dmpGetAccel(&aa, fifoBuffer);
+        mpu.dmpGetGravity(&gravity, &q);
+        mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
+        mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
+        
+        insVel[0] = ((double) aaWorld.x*9.81/16384.0)*20/1000.0;
+        insVel[1] = ((double) aaWorld.y*9.81/16384.0)*20/1000.0;
+        insVel[2] = ((double) aaWorld.z*9.81/16384.0)*20/1000.0;
 
-        #ifdef OUTPUT_GLOBALACC
-            mpu.dmpGetQuaternion(&q, fifoBuffer);
-            mpu.dmpGetAccel(&aa, fifoBuffer);
-            mpu.dmpGetGravity(&gravity, &q);
-            mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-            mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
-            Serial.print(aaWorld.x*9.81/16384.0);
-            Serial.print(", ");
-            Serial.print(aaWorld.y*9.81/16384.0);
-            Serial.print(",");
-            Serial.println(aaWorld.z*9.81/16384.0);
-            delay(20);
-            //Serial.print(",");
-        #endif
+        DynamicJsonDocument JSON(128);
+        
+        JSON["Id"] = _cont;
+        JSON["posx"] = (double) aaWorld.x*9.81/16384.0;
+        JSON["posy"] = (double) aaWorld.y*9.81/16384.0;
+        JSON["posz"] = (double) aaWorld.z*9.81/16384.0;
 
-        #ifdef OUTPUT_YAWPITCHROLL
-            mpu.dmpGetQuaternion(&q, fifoBuffer);
-            mpu.dmpGetGravity(&gravity, &q);
-            mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-            Serial.print(ypr[0] * 180/M_PI);
-            Serial.print(",");
-            Serial.print(ypr[1] * 180/M_PI);
-            Serial.print(",");
-            Serial.println(ypr[2] * 180/M_PI);
-            delay(20);
-        #endif
+        String S_JSON;
+        
+        serializeJson(JSON, S_JSON);
+
+        if (WiFi.status() == WL_CONNECTED) {
+            HTTPClient http;
+            http.begin(serverUrl);
+            http.addHeader("Content-Type", "application/json");
+
+
+            // Envío de POST al servidor y verifica el estatus de la respuesta
+            int httpResponseCode = http.POST(S_JSON);
+
+            if (httpResponseCode > 0) {
+                String response = http.getString();
+                Serial.println("Respuesta del servidor:");
+                Serial.println(response);
+            } else {
+                Serial.print("Error en el envío de POST (Codigo): ");
+                Serial.println(httpResponseCode);
+            }
+
+            http.end();      
+        }          
+        delay(20);
     }
 }
