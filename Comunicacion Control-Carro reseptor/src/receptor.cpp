@@ -43,9 +43,9 @@ void setup() {
 }
 
 void loop() {
+
   if (radio.available()) {
     radio.read(&datosControl, sizeof(datosControl));
-    
     // Control Adelante Atras
     if (datosControl.ejeY_2 > 512) {
     digitalWrite(IN1, HIGH);

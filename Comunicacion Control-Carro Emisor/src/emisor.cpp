@@ -31,6 +31,7 @@ void setup() {
     while (1);
   }
   radio.openWritingPipe(direccion);
+  Serial.println("Modulo RF iniciado");
   //radio.setPALevel(RF24_PA_LOW);
 }
 
